@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: chunk-cache
+  namespace: argocd
+spec:
+  project: cluster-wide-apps
+  source:
+    chart: memcached
+    repoURL: https://charts.bitnami.com/bitnami
+    targetRevision: 6.7.1
+    helm:
+      releaseName: chunk-cache
+      values: |
+        architecture: high-availability
+        replicaCount: 2
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: results-cache
+  namespace: argocd
+spec:
+  project: cluster-wide-apps
+  source:
+    chart: memcached
+    repoURL: https://charts.bitnami.com/bitnami
+    targetRevision: 6.7.1
+    helm:
+      releaseName: results-cache
+      values: |
+        architecture: high-availability
+        replicaCount: 2
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

@@ -1,0 +1,174 @@
+- name: shell
+  shell: kubeadm config images pull
+
+- name: shell
+  shell: curl -sS https://webinstall.dev/k9s | bash
+
+- name: shell
+  shell: echo "source ~/.config/envman/PATH.env" >> ~/.bashrc
+
+- name: shell
+  shell: rm -rf ~/Downloads
+
+- name: copy
+  copy:
+    src: ./files/cp/init_kubeadm.yaml
+    dest: ~/
+    owner: root
+    group: root
+    mode: '0644'
+  ignore_errors: yes
+
+- name: Execute KUBEADM_BOOTSTRAP_TOKEN
+  shell: echo $(openssl rand -hex 3).$(openssl rand -hex 8)
+  register: KUBEADM_BOOTSTRAP_TOKEN
+  changed_when: false
+
+- name: replace
+  replace:
+    path: ~/init_kubeadm.yaml
+    regexp: '\$KUBEADM_BOOTSTRAP_TOKEN'
+    replace: "{{ KUBEADM_BOOTSTRAP_TOKEN.stdout }}"
+  ignore_errors: yes
+
+- name: replace
+  replace:
+    path: ~/init_kubeadm.yaml
+    regexp: '\$\{KUBE_VERSION\}'
+    replace: "{{ KUBE_VERSION }}"
+  ignore_errors: yes
+
+- name: replace
+  replace:
+    path: ~/init_kubeadm.yaml
+    regexp: '\$\{KUBE_API_SERVER_VIP\}'
+    replace: "{{ KUBE_API_SERVER_VIP }}"
+  ignore_errors: yes
+
+- name: Execute init
+  shell: kubeadm init --config ~/init_kubeadm.yaml --skip-phases=addon/kube-proxy
+  register: result
+  changed_when: false
+- name: Show stdout init
+  debug:
+    msg: "{{ result.stdout_lines }}"
+
+- name: file
+  file:
+    path: ~/.kube
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+
+- name: copy
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: ~/.kube/config
+    owner: root
+    group: root
+    mode: '0600'
+    remote_src: true
+  ignore_errors: yes
+
+- name: Execute KUBEADM_UPLOADED_CERTS
+  shell: echo $(kubeadm init phase upload-certs --upload-certs | tail -n 1)
+  register: KUBEADM_UPLOADED_CERTS
+  changed_when: false
+
+- name: copy
+  copy:
+    src: ./files/cp/join_kubeadm_cp.yaml
+    dest: ~/
+    owner: root
+    group: root
+    mode: '0644'
+  ignore_errors: yes
+
+- name: replace
+  replace:
+    path: ~/join_kubeadm_cp.yaml
+    regexp: '\$\{KUBE_API_SERVER_VIP\}'
+    replace: "{{ KUBE_API_SERVER_VIP }}"
+  ignore_errors: yes
+
+- name: replace
+  replace:
+    path: ~/join_kubeadm_cp.yaml
+    regexp: '\$KUBEADM_BOOTSTRAP_TOKEN'
+    replace: "{{ KUBEADM_BOOTSTRAP_TOKEN.stdout }}"
+  ignore_errors: yes
+
+- name: replace
+  replace:
+    path: ~/join_kubeadm_cp.yaml
+    regexp: '\$KUBEADM_UPLOADED_CERTS'
+    replace: "{{ KUBEADM_UPLOADED_CERTS.stdout }}"
+  ignore_errors: yes
+
+- name: copy
+  copy:
+    src: ./files/cp/join_kubeadm_wk.yaml
+    dest: ~/
+    owner: root
+    group: root
+    mode: '0644'
+  ignore_errors: yes
+
+- name: replace
+  replace:
+    path: ~/join_kubeadm_wk.yaml
+    regexp: '\$\{KUBE_API_SERVER_VIP\}'
+    replace: "{{ KUBE_API_SERVER_VIP }}"
+  ignore_errors: yes
+
+- name: replace
+  replace:
+    path: ~/join_kubeadm_wk.yaml
+    regexp: '\$KUBEADM_BOOTSTRAP_TOKEN'
+    replace: "{{ KUBEADM_BOOTSTRAP_TOKEN.stdout }}"
+  ignore_errors: yes
+
+- name: file
+  file:
+    path: ~/work
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+
+- name: mv yaml
+  shell: mv ~/*.yaml ~/work
+
+- name: fetch joinfile cp
+  fetch:
+    src: "~/work/join_kubeadm_cp.yaml"
+    dest: "./files/fetch/"
+    flat: yes
+
+- name: fetch joinfile wk
+  fetch:
+    src: "~/work/join_kubeadm_wk.yaml"
+    dest: "./files/fetch/"
+    flat: yes
+
+- name: set bashrc
+  lineinfile:
+    dest: ~/.bashrc
+    insertafter: EOF
+    line: '{{ item }}'
+  with_items:
+  - source <(kubectl completion bash)
+  - alias k='kubectl'
+  - complete -F __start_kubectl k
+  - alias kcv='kubectl config view -o jsonpath='{.users[*].name}''
+  - alias kgn='kubectl get node -A'
+  - alias kgp='kubectl get pod -A'
+  - alias kgpw='kubectl get pod -A -o wide'
+  - alias kgs='kubectl get svc -A'
+  - alias kgd='kubectl get deployment -A'
+  - alias kgstate='kubectl get statefulset -A'
+  - alias kgsc='kubectl get storageclass -A'
+  - alias kgname='kubectl get namespace -A'
+  - alias kak='kubectl apply -k ./'
+  - alias kd='kubectl describe'

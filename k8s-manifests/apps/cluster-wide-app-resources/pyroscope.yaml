@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pyroscope-lb
+  namespace: pyroscope
+spec:
+  type: NodePort
+  ports:
+  - port: 4040
+    targetPort: 4040
+    nodePort: 30047
+    protocol: TCP
+  selector:
+    app.kubernetes.io/component: querier
+    app.kubernetes.io/instance: pyroscope
+    app.kubernetes.io/name: pyroscope
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pyroscope
+  namespace: argocd
+spec:
+  project: cluster-wide-apps
+  source:
+    chart: pyroscope
+    repoURL: https://grafana.github.io/helm-charts
+    targetRevision: 1.3.0
+    helm:
+      releaseName: pyroscope
+      values: |
+        pyroscope:
+          config: |
+            storage:
+              backend: s3
+              s3:
+                endpoint: minio.minio:9000
+                region: eu-west-1
+                bucket_name: k8s-pyroscope
+                access_key_id: minio
+                secret_access_key: minio123
+                insecure: true
+          extraArgs:
+            store-gateway.sharding-ring.replication-factor: "3"
+          components:
+            querier:
+              kind: Deployment
+              replicaCount: 2
+              resources:
+                limits:
+                  memory: 256Mi
+                requests:
+                  memory: 48Mi
+                  cpu: 200m
+            query-frontend:
+              kind: Deployment
+              replicaCount: 2
+              resources:
+                limits:
+                  memory: 256Mi
+                requests:
+                  memory: 48Mi
+                  cpu: 100m
+            query-scheduler:
+              kind: Deployment
+              replicaCount: 2
+              resources:
+                limits:
+                  memory: 256Mi
+                requests:
+                  memory: 48Mi
+                  cpu: 100m
+            distributor:
+              kind: Deployment
+              replicaCount: 2
+              resources:
+                limits:
+                  memory: 256Mi
+                requests:
+                  memory: 48Mi
+                  cpu: 100m
+            ingester:
+              kind: StatefulSet
+              replicaCount: 2
+              terminationGracePeriodSeconds: 600
+              resources:
+                limits:
+                  memory: 2Gi
+                requests:
+                  memory: 256Mi
+                  cpu: 200m
+            compactor:
+              kind: StatefulSet
+              replicaCount: 2
+              persistence:
+                enabled: false
+              resources:
+                limits:
+                  memory: 2Gi
+                requests:
+                  memory: 256Mi
+                  cpu: 200m
+            store-gateway:
+              kind: StatefulSet
+              replicaCount: 2
+              persistence:
+                enabled: false
+              resources:
+                limits:
+                  memory: 2Gi
+                requests:
+                  memory: 256Mi
+                  cpu: 200m
+        minio:
+          enabled: false
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: pyroscope
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

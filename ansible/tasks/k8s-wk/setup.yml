@@ -1,0 +1,15 @@
+- name: Copy join_kubeadm_wk.yaml
+  copy:
+    src: "{{ item }}"
+    dest: ~/
+    mode: '0755'
+  with_fileglob:
+  - "./files/fetch/join_kubeadm_wk.yaml"
+
+- name: Execute join
+  shell: kubeadm join --config ~/join_kubeadm_wk.yaml
+  register: result
+  changed_when: false
+- name: Show stdout join
+  debug:
+    msg: "{{ result.stdout_lines }}"

@@ -1,0 +1,38 @@
+var:
+  k8s_cp:
+    tasks:
+    - common/common.yml
+    - common/nfs-client.yml
+    - k8s-cp/ha-master.yml
+    - common/k8s.yml
+    - k8s-cp/setup.yml
+    - k8s-cp/cilium.yml
+    - k8s-cp/argocd.yml
+    - k8s-cp/other-k8s-app.yml
+    # - k8s-cp/clis.yml
+    - common/parameter.yml
+    - k8s-cp/cert-cron.yml
+  k8s_cp_join:
+    tasks:
+    # - common/common.yml
+    # - common/nfs-client.yml
+    # - k8s-cp/ha-backend.yml
+    # - common/k8s.yml
+    # - common/join.yml
+    # - common/parameter.yml
+  k8s_wk:
+    tasks:
+    - common/common.yml
+    - common/nfs-client.yml
+    - k8s-wk/ha-master.yml
+    - common/k8s.yml
+    - k8s-wk/setup.yml
+    - common/parameter.yml
+  k8s_wk_backup:
+    tasks:
+    - common/common.yml
+    - common/nfs-client.yml
+    - k8s-wk/ha-backup.yml
+    - common/k8s.yml
+    - k8s-wk/setup.yml
+    - common/parameter.yml

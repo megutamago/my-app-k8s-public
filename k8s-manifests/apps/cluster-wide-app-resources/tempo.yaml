@@ -1,0 +1,178 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo-lb
+  namespace: tracing
+spec:
+  type: NodePort
+  ports:
+  - name: http
+    port: 4317
+    targetPort: 4317
+    nodePort: 30046
+    protocol: TCP
+  selector:
+    app.kubernetes.io/component: distributor
+    app.kubernetes.io/instance: tempo-distributed
+    app.kubernetes.io/name: tempo
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tempo-minio-secret
+  namespace: tracing
+type: Opaque
+data:
+  MINIO_ACCESS_KEY_ID: dGVtcG8=
+  MINIO_SECRET_ACCESS_KEY: dGVtcG9QYXNzd29yZA==
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo-distributed
+  namespace: argocd
+spec:
+  project: cluster-wide-apps
+  source:
+    chart: tempo-distributed
+    repoURL: https://grafana.github.io/helm-charts
+    targetRevision: 1.7.0
+    helm:
+      releaseName: tempo-distributed
+      values: |
+        # Enable Serivce Monitor
+        metaMonitoring:
+          serviceMonitor:
+            enabled: true
+            labels:
+              release: prometheus
+
+        # Enable trace ingestion
+        traces:
+          otlp:
+            grpc:
+              enabled: true
+            http:
+              enabled: true
+          zipkin:
+            enabled: true
+          jaeger:
+            thriftCompact:
+              enabled: true
+            thriftHttp:
+              enabled: true
+          opencensus:
+            enabled: true
+
+        # Configure S3 backend
+        storage:
+          trace:
+            backend: s3
+            s3:
+              bucket: k8s-tempo
+              endpoint: minio.minio:9000
+              region: eu-west-1
+              access_key: minio
+              secret_key: minio123
+              insecure: true
+
+        # Configure distributor
+        distributor:
+          config:
+            log_received_spans:
+              enabled: true
+          # Enable environment variables in config file
+          # https://grafana.com/docs/tempo/latest/configuration/#use-environment-variables-in-the-configuration
+          extraArgs:
+            - '-config.expand-env=true'
+          extraEnv:
+            - name: MINIO_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: tempo-minio-secret
+                  key: MINIO_ACCESS_KEY_ID
+            - name: MINIO_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tempo-minio-secret
+                  key: MINIO_SECRET_ACCESS_KEY
+        # Configure ingester
+        ingester:
+          # Enable environment variables in config file
+          # https://grafana.com/docs/tempo/latest/configuration/#use-environment-variables-in-the-configuration
+          extraArgs:
+            - '-config.expand-env=true'
+          extraEnv:
+            - name: MINIO_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: tempo-minio-secret
+                  key: MINIO_ACCESS_KEY_ID
+            - name: MINIO_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tempo-minio-secret
+                  key: MINIO_SECRET_ACCESS_KEY
+        # Configure compactor
+        compactor:
+          # Enable environment variables in config file
+          # https://grafana.com/docs/tempo/latest/configuration/#use-environment-variables-in-the-configuration
+          extraArgs:
+            - '-config.expand-env=true'
+          extraEnv:
+            - name: MINIO_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: tempo-minio-secret
+                  key: MINIO_ACCESS_KEY_ID
+            - name: MINIO_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tempo-minio-secret
+                  key: MINIO_SECRET_ACCESS_KEY
+        # Configure querier
+        querier:
+          # Enable environment variables in config file
+          # https://grafana.com/docs/tempo/latest/configuration/#use-environment-variables-in-the-configuration
+          extraArgs:
+            - '-config.expand-env=true'
+          extraEnv:
+            - name: MINIO_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: tempo-minio-secret
+                  key: MINIO_ACCESS_KEY_ID
+            - name: MINIO_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tempo-minio-secret
+                  key: MINIO_SECRET_ACCESS_KEY
+        # Configure query-frontend
+        queryFrontend:
+          # Enable environment variables in config file
+          # https://grafana.com/docs/tempo/latest/configuration/#use-environment-variables-in-the-configuration
+          extraArgs:
+            - '-config.expand-env=true'
+          extraEnv:
+            - name: MINIO_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: tempo-minio-secret
+                  key: MINIO_ACCESS_KEY_ID
+            - name: MINIO_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tempo-minio-secret
+                  key: MINIO_SECRET_ACCESS_KEY
+        # Disable Minio server installation
+        minio:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tracing
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

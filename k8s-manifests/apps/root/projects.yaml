@@ -1,0 +1,71 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cluster-wide-apps
+  namespace: argocd
+spec:
+  description: The project of applications used by the entire cluster
+  sourceRepos:
+  - '*'
+  destinations:
+  - namespace: 'cluster-wide-apps'
+    server: https://kubernetes.default.svc
+  # k8s-manifests/apps/ で定義されている各種アプリケーションが稼働に必要なリソースのインストールを行う
+  # そのため、project側でリソース追加先のnamespaceへの変更を明示的に許可する必要がある
+  - namespace: 'kube-system'
+    server: https://kubernetes.default.svc
+  - namespace: 'monitoring'
+    server: https://kubernetes.default.svc
+  - namespace: 'logging'
+    server: https://kubernetes.default.svc
+  - namespace: 'tracing'
+    server: https://kubernetes.default.svc
+  - namespace: 'grafana'
+    server: https://kubernetes.default.svc
+  - namespace: 'minio'
+    server: https://kubernetes.default.svc
+  - namespace: 'pyroscope'
+    server: https://kubernetes.default.svc
+  - namespace: 'n8n'
+    server: https://kubernetes.default.svc
+  - namespace: 'mysql-operator'
+    server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: private-isu
+  namespace: argocd
+spec:
+  description: private-isu yeahyeah
+  sourceRepos:
+  - '*'
+  destinations:
+  - namespace: private-isu
+    server: https://kubernetes.default.svc
+  - namespace: argocd
+    server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: misskey
+  namespace: argocd
+spec:
+  description: misskey yeahyeah
+  sourceRepos:
+  - '*'
+  destinations:
+  - namespace: misskey
+    server: https://kubernetes.default.svc
+  - namespace: argocd
+    server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'

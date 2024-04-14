@@ -1,0 +1,48 @@
+- name: apt_repository
+  apt_repository:
+    repo: 'ppa:vbernat/haproxy-2.8'
+
+- name: Update Upgrade
+  apt:
+    upgrade: yes
+    update_cache: true
+
+- name: apt
+  apt:
+    name:
+    - haproxy
+    - keepalived
+
+- name: copy
+  copy:
+    src: ./files/redundant/wk/haproxy/haproxy.cfg
+    dest: /etc/haproxy/
+    mode: '0644'
+  ignore_errors: yes
+
+- name: shell
+  shell: echo "net.ipv4.ip_nonlocal_bind = 1" >> /etc/sysctl.conf
+
+- name: shell
+  shell: sysctl -p
+
+- name: copy
+  copy:
+    src: ./files/redundant/wk/keepalived/keepalived_backup.conf
+    dest: /etc/keepalived/keepalived.conf
+    mode: '0644'
+  ignore_errors: yes
+
+- name: systemd
+  systemd:
+    name: keepalived
+    state: restarted
+    enabled: true
+  ignore_errors: yes
+
+- name: systemd
+  systemd:
+    name: haproxy
+    state: restarted
+    enabled: true
+  ignore_errors: yes

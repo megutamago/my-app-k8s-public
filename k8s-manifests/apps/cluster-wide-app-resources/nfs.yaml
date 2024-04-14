@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nfs
+  namespace: argocd
+spec:
+  project: cluster-wide-apps
+  source:
+    chart: nfs-subdir-external-provisioner
+    repoURL: https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+    targetRevision: 4.0.18
+    helm:
+      releaseName: nfs
+      values: |
+        replicaCount: 1
+        nfs:
+          server: 192.168.11.11
+          path: /mnt/nfsshare/k8s/share
+          reclaimPolicy: Retain
+        storageClass:
+          name: nfs-share
+          defaultClass: true
+          allowVolumeExpansion: true
+          accessModes: ReadWriteOnce
+          volumeBindingMode: WaitForFirstConsumer
+        accessModes: ReadWriteMany
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

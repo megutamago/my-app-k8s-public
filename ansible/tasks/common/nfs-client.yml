@@ -1,0 +1,21 @@
+- name: apt
+  apt:
+    name:
+    - nfs-common
+
+- name: Create folder
+  file:
+    path: "/mnt/share"
+    state: directory
+    mode: "777"
+
+- name: set fstab
+  lineinfile:
+    dest: /etc/fstab
+    insertafter: EOF
+    line: '{{ item }}'
+  with_items:
+  - '192.168.11.11:/mnt/nfsshare/k8s/share /mnt/share nfs defaults 0 0'
+
+- name: mount
+  shell: mount -a

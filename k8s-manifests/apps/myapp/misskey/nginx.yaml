@@ -1,0 +1,156 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx
+data:
+  misskey.conf: |
+    # For WebSocket
+    map $http_upgrade $connection_upgrade {
+      default upgrade;
+      ''      close;
+    }
+
+    proxy_cache_path /tmp/nginx_cache levels=1:2 keys_zone=cache1:16m max_size=1g inactive=720m use_temp_path=off;
+
+    server {
+      listen 80;
+      listen [::]:80;
+      server_name pekoraskey.melanmeg.com:3000;
+
+      # For SSL domain validation
+      root /var/www/html;
+      # Useful for Let's Encrypt
+      location /.well-known/acme-challenge/ { allow all; }
+      location /.well-known/pki-validation/ { allow all; }
+      location / { return 301 https://$host$request_uri; }
+    }
+
+    server {
+      listen 443 ssl http2;
+      listen [::]:443 ssl http2;
+      server_name pekoraskey.melanmeg.com:3000;
+
+      ssl_session_timeout 1d;
+      ssl_session_cache shared:ssl_session_cache:10m;
+      ssl_session_tickets off;
+
+      # SSL protocol settings
+      ssl_protocols TLSv1.2 TLSv1.3;
+      ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+      ssl_prefer_server_ciphers off;
+      ssl_stapling on;
+      ssl_stapling_verify on;
+
+      # Certificate
+      ssl_certificate     /etc/nginx/ssl/tls.crt;
+      ssl_certificate_key /etc/nginx/ssl/tls.key;
+
+      # Change to your upload limit
+      client_max_body_size 80m;
+
+      keepalive_timeout    70;
+      sendfile             on;
+
+      gzip on;
+      gzip_disable "msie6";
+      gzip_vary on;
+      gzip_proxied any;
+      gzip_comp_level 6;
+      gzip_buffers 16 8k;
+      gzip_http_version 1.1;
+      gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+      add_header Strict-Transport-Security "max-age=31536000";
+
+      # Proxy to Node
+      location / {
+          proxy_pass http://misskey-service.misskey:3000;
+          proxy_set_header Host $host;
+          proxy_http_version 1.1;
+          proxy_redirect off;
+
+          # If it's behind another reverse proxy or CDN, remove the following.
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto https;
+
+          # For WebSocket
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection $connection_upgrade;
+
+          # Cache settings
+          proxy_cache cache1;
+          proxy_cache_lock on;
+          proxy_cache_use_stale updating;
+          proxy_force_ranges on;
+          add_header X-Cache $upstream_cache_status;
+
+          tcp_nodelay on;
+      }
+
+      error_page 500 501 502 503 504 /500.html;
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25.3
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 250m
+            memory: 512Mi
+        ports:
+        - containerPort: 443
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /etc/nginx/ssl
+          readOnly: true
+        - name: nginx
+          mountPath: /etc/nginx/conf.d/misskey.conf
+          subPath: misskey.conf
+      volumes:
+      - name: tls-certs
+        secret:
+          # secretName: misskey-nginx-tls-secret
+          secretName: letsencript
+      - name: nginx
+        configMap:
+          name: nginx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+  labels:
+    app: nginx
+spec:
+  type: NodePort
+  ports:
+  - name: https
+    port: 443
+    targetPort: 443
+    nodePort: 30081
+    protocol: TCP
+  - name: http
+    port: 80
+    targetPort: 80
+    nodePort: 30082
+    protocol: TCP
+  selector:
+    app: nginx

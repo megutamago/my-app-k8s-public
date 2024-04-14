@@ -1,0 +1,55 @@
+# ref: https://github.com/catatsuy/private-isu
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-service
+  labels:
+    app: app
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    app: app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-deployment
+spec:
+  selector:
+    matchLabels:
+      app: app
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: app
+    spec:
+      containers:
+      - name: app
+        image: melanmeg/private-isu-app:1.0
+        env:
+        - name: ISUCONP_DB_HOST
+          value: "mycluster-instances.private-isu"
+        - name: ISUCONP_DB_PORT
+          value: "3306"
+        - name: ISUCONP_DB_USER
+          value: "root"
+        - name: ISUCONP_DB_PASSWORD
+          value: "root"
+        - name: ISUCONP_DB_NAME
+          value: "isuconp"
+        - name: ISUCONP_MEMCACHED_ADDRESS
+          value: "memcached.private-isu:11211"
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 250m
+            memory: 512Mi

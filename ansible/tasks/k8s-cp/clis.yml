@@ -1,0 +1,52 @@
+# minio cli install
+- name: shell
+  shell: |
+    curl https://dl.min.io/client/mc/release/linux-amd64/mc \
+      --create-dirs \
+      -o /usr/local/bin/mc && \
+    chmod a+x /usr/local/bin/mc
+
+# tanka install
+# ref: https://tanka.dev/install#jsonnet-bundler
+- name: shell
+  shell: |
+    curl -Lo /usr/local/bin/tk https://github.com/grafana/tanka/releases/latest/download/tk-linux-amd64 && \
+    chmod a+x /usr/local/bin/tk
+
+# jsonnet Bundler install
+- name: shell
+  shell: |
+    curl -Lo /usr/local/bin/jb https://github.com/jsonnet-bundler/jsonnet-bundler/releases/latest/download/jb-linux-amd64 && \
+    chmod a+x /usr/local/bin/jb
+
+# argocd cli install
+- name: shell
+  shell: |
+    curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64 && \
+    sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd && \
+    rm argocd-linux-amd64
+
+# psql15 install
+# https://www.postgresql.org/download/linux/ubuntu/
+- name: shell
+  shell: sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+
+- name: shell
+  shell: wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+
+- name: Update Upgrade
+  apt:
+    update_cache: true
+
+- name: apt
+  apt:
+    name:
+    - postgresql-15
+
+# + redis, mysql-server, tree
+- name: apt
+  apt:
+    name:
+    - tree
+    - redis
+    - mysql-server

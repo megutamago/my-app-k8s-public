@@ -1,0 +1,168 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki-lb
+  namespace: logging
+spec:
+  type: NodePort
+  ports:
+  - port: 3100
+    targetPort: 3100
+    nodePort: 30045
+    protocol: TCP
+  selector:
+    app.kubernetes.io/component: write
+    app.kubernetes.io/instance: loki
+    app.kubernetes.io/name: loki
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: loki-minio-secret
+  namespace: logging
+type: Opaque
+data:
+  MINIO_ACCESS_KEY_ID: bG9raQ==
+  MINIO_SECRET_ACCESS_KEY: bG9raVBhc3N3b3Jk
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+spec:
+  project: cluster-wide-apps
+  source:
+    chart: loki
+    repoURL: https://grafana.github.io/helm-charts
+    targetRevision: 5.37.0
+    helm:
+      releaseName: loki
+      values: |
+        # Enable Serivce Monitor
+        monitoring:
+          serviceMonitor:
+            enabled: true
+            labels:
+              release: prometheus
+
+        loki:
+          # Disable multi-tenant support
+          auth_enabled: false
+
+          # -- Configure memcached as an external cache for chunk and results cache.
+          memcached:
+            chunk_cache:
+              enabled: true
+              host: "chunk-cache-memcached.logging.svc"
+              service: "memcache"
+              batch_size: 256
+              parallelism: 10
+            results_cache:
+              enabled: true
+              host: "results-cache-memcached.logging.svc"
+              service: "memcache"
+              timeout: "500ms"
+              default_validity: "12h"
+
+          # S3 backend storage configuration
+          storage:
+            bucketNames:
+              chunks: k8s-loki
+              ruler: k8s-loki
+            type: s3
+            s3:
+              endpoint: minio.minio:9000
+              region: eu-west-1
+              secretAccessKey: minio123
+              accessKeyId: minio
+              s3ForcePathStyle: true
+              insecure: true
+              http_config:
+                idle_conn_timeout: 90s
+                response_header_timeout: 0s
+                insecure_skip_verify: true
+
+        # Configuration for the backend pods
+        backend:
+          replicas: 2
+
+        # Configuration for the write
+        write:
+          # Number of replicas for the write
+          replicas: 2
+          persistence:
+            storageClass: nfs-share
+            size: 10Gi
+
+          # Enable environment variables in config file
+          # https://grafana.com/docs/loki/latest/configuration/#use-environment-variables-in-the-configuration
+          extraArgs:
+            - '-config.expand-env=true'
+          extraEnv:
+            - name: MINIO_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: loki-minio-secret
+                  key: MINIO_ACCESS_KEY_ID
+            - name: MINIO_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: loki-minio-secret
+                  key: MINIO_SECRET_ACCESS_KEY
+
+        # Configuration for the read
+        read:
+          # Number of replicas for the read
+          replicas: 2
+          persistence:
+            storageClass: nfs-share
+            size: 10Gi
+
+          # Enable environment variables in config file
+          # https://grafana.com/docs/loki/latest/configuration/#use-environment-variables-in-the-configuration
+          extraArgs:
+            - '-config.expand-env=true'
+          extraEnv:
+            - name: MINIO_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: loki-minio-secret
+                  key: MINIO_ACCESS_KEY_ID
+            - name: MINIO_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: loki-minio-secret
+                  key: MINIO_SECRET_ACCESS_KEY
+
+        # Configuration for the gateway
+        gateway:
+          replicas: 1
+          enabled: true
+
+        # Disable mino installation
+        minio:
+          enabled: false
+
+        # Disable self-monitoring
+        monitoring:
+          selfMonitoring:
+            enabled: false
+            grafanaAgent:
+              installOperator: false
+          lokiCanary:
+              enabled: true
+
+        # Disable helm-test
+        test:
+          enabled: false
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    - Replace=true

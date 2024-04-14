@@ -1,0 +1,17 @@
+# apt
+- name: apt
+  apt:
+    name:
+    - certbot
+
+- name: copy
+  copy:
+    src: ./files/secrets/cert-update.sh
+    dest: ~/work/
+    owner: root
+    group: root
+    mode: '0655'
+  ignore_errors: true
+
+- name: shell
+  shell: echo "00 04 08 * * root /bin/bash ~/work/cert_update.sh" > /etc/cron.d/letsencrypt

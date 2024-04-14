@@ -1,0 +1,132 @@
+- name: lineinfile
+  lineinfile:
+    path: /etc/modules-load.d/containerd.conf
+    line: '{{ item }}'
+    create: yes
+  with_items:
+  - overlay
+  - br_netfilter
+
+- name: shell
+  shell: modprobe overlay
+
+- name: shell
+  shell: modprobe br_netfilter
+
+- name: lineinfile
+  lineinfile:
+    path: /etc/sysctl.d/99-kubernetes-cri.conf
+    line: '{{ item }}'
+    create: yes
+  with_items:
+  - 'net.bridge.bridge-nf-call-iptables  = 1'
+  - 'net.ipv4.ip_forward                 = 1'
+  - 'net.bridge.bridge-nf-call-ip6tables = 1'
+
+- name: shell
+  shell: sysctl --system
+
+- name: Update
+  apt:
+    update_cache: true
+
+- name: apt
+  apt:
+    name:
+    - apt-transport-https
+    - curl
+    - gpg
+
+- name: file
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+
+- name: shell
+  shell: curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+- name: shell
+  shell: chmod a+r /etc/apt/keyrings/docker.gpg
+
+- name: shell
+  shell: |
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+      "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+- name: Update
+  apt:
+    update_cache: true
+
+- name: apt
+  apt:
+    name:
+    - containerd.io
+  ignore_errors: yes
+
+- name: file
+  file:
+    path: /etc/containerd
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+
+- name: shell
+  shell: containerd config default > /etc/containerd/config.toml
+
+- name: shell
+  shell: |
+    if grep -q "SystemdCgroup = true" "/etc/containerd/config.toml"; then
+      echo "Config found, skip rewriting..."
+    else
+      sed -i -e "s/SystemdCgroup \= false/SystemdCgroup \= true/g" /etc/containerd/config.toml
+    fi
+  ignore_errors: yes
+
+- name: systemd
+  systemd:
+    name: containerd
+    state: restarted
+    enabled: true
+  ignore_errors: yes
+
+- name: copy
+  copy:
+    src: ./files/common/k8s.conf
+    dest: /etc/sysctl.d/
+    mode: '0644'
+  ignore_errors: yes
+
+- name: shell
+  shell: sysctl --system
+
+- name: shell
+  shell: curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: shell
+  shell: echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
+
+- name: Update
+  apt:
+    update_cache: true
+
+- name: apt
+  apt:
+    name:
+    - "kubelet={{ INSTALL_KUBE_VERSION }}"
+    - "kubeadm={{ INSTALL_KUBE_VERSION }}"
+    - "kubectl={{ INSTALL_KUBE_VERSION }}"
+  ignore_errors: yes
+
+- name: shell
+  shell: apt-mark hold kubelet kubeadm kubectl
+
+- name: shell
+  shell: swapoff -a
+
+- name: shell
+  shell: update-alternatives --set iptables /usr/sbin/iptables-legacy

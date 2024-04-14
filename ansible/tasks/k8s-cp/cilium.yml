@@ -1,0 +1,20 @@
+- name: shell
+  shell: curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+
+- name: shell
+  shell: helm repo add cilium https://helm.cilium.io/
+
+- name: Execute helm
+  shell: |
+    helm install cilium cilium/cilium \
+        --version 1.15.0-pre.2 \
+        --namespace kube-system \
+        --set kubeProxyReplacement=strict \
+        --set k8sServiceHost={{ KUBE_API_SERVER_VIP }} \
+        --set k8sServicePort=8443
+  register: result
+  changed_when: false
+- name: Show stdout helm
+  debug:
+    msg: "{{ result.stdout_lines }}"
+  ignore_errors: true

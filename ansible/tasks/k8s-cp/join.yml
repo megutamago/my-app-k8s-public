@@ -1,0 +1,22 @@
+- name: Copy ha-backup.sh
+  copy:
+    src: "./files/ha-backup.sh"
+    dest: ~/work/
+    mode: '0755'
+
+- name: Copy join_kubeadm_cp.yaml
+  copy:
+    src: "./files/fetch/join_kubeadm_cp.yaml"
+    dest: ~/
+    mode: '0755'
+
+- name: Execute ha-backup.sh
+  shell: bash ~/work/ha-backup.sh
+
+- name: Execute join
+  shell: kubeadm join --config ~/join_kubeadm_cp.yaml
+  register: result
+  changed_when: false
+- name: Show stdout join
+  debug:
+    msg: "{{ result.stdout_lines }}"

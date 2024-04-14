@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dump-job
+spec:
+  template:
+    metadata:
+      name: dump-job
+    spec:
+      containers:
+      - name: job-container
+        image: ubuntu:22.04
+        command:
+        - bash
+        - "-c"
+        - |
+          set -ex
+          apt update -y
+          apt install -y curl bzip2 mysql-server-8.0
+          curl -L https://github.com/catatsuy/private-isu/releases/download/img/dump.sql.bz2 -o /tmp/dump.sql.bz2
+          bunzip2 /tmp/dump.sql.bz2
+          mysql -h mycluster-instances.private-isu -u root -proot < /tmp/dump.sql
+      restartPolicy: Never

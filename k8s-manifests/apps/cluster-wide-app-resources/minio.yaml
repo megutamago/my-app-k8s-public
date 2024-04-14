@@ -1,0 +1,138 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-lb
+  namespace: minio
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    targetPort: 9001
+    nodePort: 30044
+    protocol: TCP
+  selector:
+    app: minio
+    release: minio
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-secret
+  namespace: minio
+type: Opaque
+data:
+  rootUser: bWluaW8=
+  rootPassword: bWluaW8xMjM=
+  lokiPassword: bG9raVBhc3N3b3Jk
+  tempoPassword: dGVtcG9QYXNzd29yZA==
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: minio
+  namespace: argocd
+spec:
+  project: cluster-wide-apps
+  source:
+    chart: minio
+    repoURL: https://charts.min.io/ # ref: https://artifacthub.io/packages/helm/minio-official/minio
+    targetRevision: 5.0.14
+    helm:
+      releaseName: minio
+      values: |
+        rootUser: minio
+        rootPassword: minio123
+
+        # Minio Prometheus
+        environment:
+          MINIO_PROMETHEUS_URL: http://prometheus-kube-prometheus-prometheus.monitoring:9090
+          MINIO_PROMETHEUS_JOB_ID: minio-job
+          MINIO_PROMETHEUS_AUTH_TYPE: public
+
+        # Enable Serivce Monitor
+        metrics:
+          serviceMonitor:
+            enabled: true
+            additionalLabels:
+              release: prometheus
+
+        # Get root user/password from secret
+        existingSecret: minio-secret
+
+        # Number of drives attached to a node
+        drivesPerNode: 1
+        # Number of MinIO containers running
+        replicas: 2
+        # Number of expanded MinIO clusters
+        pools: 1
+        # Persistence
+        persistence:
+          enabled: true
+          storageClass: "nfs-share"
+          accessMode: ReadWriteOnce
+          size: 20Gi
+
+        # Resource request
+        resources:
+          requests:
+            memory: 1Gi
+
+        # Minio Buckets
+        buckets:
+          - name: k8s-loki
+            policy: none
+          - name: k8s-tempo
+            policy: none
+          - name: k8s-pyroscope
+            policy: none
+
+        # mc Commands
+        customCommands:
+          - command: ilm rule add myminio/k8s-loki --expire-days 90
+          - command: ilm rule add myminio/k8s-tempo --expire-days 90
+          - command: ilm rule add myminio/k8s-pyroscope --expire-days 90
+
+        # Minio Policies
+        policies:
+          - name: loki
+            statements:
+              - resources:
+                  - 'arn:aws:s3:::k8s-loki'
+                  - 'arn:aws:s3:::k8s-loki/*'
+                actions:
+                  - "s3:DeleteObject"
+                  - "s3:GetObject"
+                  - "s3:ListBucket"
+                  - "s3:PutObject"
+          - name: tempo
+            statements:
+              - resources:
+                  - 'arn:aws:s3:::k8s-tempo'
+                  - 'arn:aws:s3:::k8s-tempo/*'
+                actions:
+                  - "s3:DeleteObject"
+                  - "s3:GetObject"
+                  - "s3:ListBucket"
+                  - "s3:PutObject"
+                  - "s3:GetObjectTagging"
+                  - "s3:PutObjectTagging"
+
+        # Minio Users
+        users:
+          - accessKey: loki
+            existingSecret: minio-secret
+            existingSecretKey: lokiPassword
+            policy: loki
+          - accessKey: tempo
+            existingSecret: minio-secret
+            existingSecretKey: tempoPassword
+            policy: tempo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: minio
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
